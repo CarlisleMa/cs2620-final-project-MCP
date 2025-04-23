@@ -9,8 +9,8 @@ import logging
 from threading import Thread
 
 # Import the generated protocol buffer code
-import enhanced_mcp_pb2 as pb2
-import enhanced_mcp_pb2_grpc as pb2_grpc
+import protocol_pb2 as pb2
+import protocol_pb2_grpc as pb2_grpc
 
 class CircuitBreaker:
     """Circuit breaker for fault tolerance"""

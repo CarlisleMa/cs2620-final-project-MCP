@@ -7,8 +7,8 @@ import uuid
 from concurrent import futures
 
 # Import the generated protocol buffer code
-import enhanced_mcp_pb2 as pb2
-import enhanced_mcp_pb2_grpc as pb2_grpc
+import protocol_pb2 as pb2
+import protocol_pb2_grpc as pb2_grpc
 
 from server.auth_provider import AuthProvider
 
