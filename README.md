@@ -18,7 +18,8 @@ This project implements a distributed system with multiple microservices communi
 
 - Calendar Service (appointment management)
 - Todo Service (task management)
-- Weather Service (weather data retrieval)
+- Weather Service (weather data retrieval with Weather API integration)
+- Todo Service (task management with SQLite persistence)
 
 The weather service integrates with the Weather API to provide real-time weather data.
 
@@ -210,11 +211,16 @@ The Weather Service provides current weather and forecast data. It integrates wi
 
 ### Todo Service
 
-The Todo Service allows for task management:
+The Todo Service allows for task management with persistent storage using SQLite:
 
 **Key Methods:**
 - Task creation, retrieval, updating, and deletion
 - Task listing and filtering
+
+**Persistence:**
+- Tasks are stored in a SQLite database located in the `data/todo.db` file
+- Data persists between server restarts
+- Automatic database creation and initialization
 
 ### Calendar Service
 

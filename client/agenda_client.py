@@ -2,40 +2,59 @@ import sys
 import time
 import random
 import logging
-import json
+import time
+import sys
 from datetime import datetime
+import os
+import json
+
 from client.multi_client import MultiServerClient
 
 class AgendaClient:
-    """Client application that generates daily agendas using multiple servers"""
+    """Client for comprehensive daily agendas using multiple services"""
     
-    def __init__(self, client_id="client1", api_key="sk_client1_12345abcde"):
-        self.client = MultiServerClient(client_id, api_key)
-        self.setup_servers()
-    
-    def setup_servers(self):
-        """Connect to all required servers"""
-        servers = [
-            ("weather", "localhost:50052"),
-            ("todo", "localhost:50053"),
-            ("calendar", "localhost:50054")
-        ]
+    def __init__(self, weather_server="localhost:50052", todo_server="localhost:50053", calendar_server="localhost:50054", client_id="interactive_user"):
+        """Initialize the agenda client with connections to all services
         
-        for server_type, address in servers:
-            if not self.client.add_server(server_type, address):
-                print(f"⚠️ Warning: Could not connect to {server_type} server")
+        Args:
+            weather_server: Address of the weather server
+            todo_server: Address of the todo server
+            calendar_server: Address of the calendar server
+            client_id: The client ID to use for all operations
+        """
+        self.client_id = client_id
+        logging.info(f"Initializing agenda client with client_id: {self.client_id}")
+        
+        # Create a client that can talk to all three servers
+        self.client = MultiServerClient({
+            "weather": weather_server,
+            "todo": todo_server,
+            "calendar": calendar_server
+        }, default_client_id=client_id)
     
     def generate_daily_agenda(self):
         """Generate a comprehensive daily agenda"""
         try:
-            # Get raw agenda data from servers
-            raw_agenda = self.client.generate_agenda()
+            # Update the client object with our client ID - this will explicitly override
+            # any other client IDs that might have been set elsewhere
+            self.client.client_id = self.client_id
+            logging.info(f"Generating agenda with client_id: {self.client_id}")
             
-            # Format it nicely
-            return self._format_agenda(raw_agenda)
+            # Generate agenda and update display
+            try:
+                agenda = self.client.generate_agenda()
+                # Debug the agenda data
+                logging.info(f"Raw agenda data: {json.dumps(agenda)}")
+                formatted_agenda = self._format_agenda(agenda)
+                print("\nUpdating your agenda...\n")
+                print(formatted_agenda)
+                return formatted_agenda
+            except Exception as e:
+                logging.error(f"Error generating agenda: {str(e)}")
+                print(f"Error generating agenda: {str(e)}")
         except Exception as e:
             logging.error(f"Error generating agenda: {str(e)}")
-            return f"Error generating agenda: {str(e)}"
+            print(f"Error generating agenda: {str(e)}")
     
     def _format_agenda(self, agenda):
         """Format the agenda data into a readable format"""
@@ -85,29 +104,53 @@ class AgendaClient:
         
         # Add tasks
         formatted += "\n✅ To-Do List:\n"
-        if agenda.get("tasks") and len(agenda["tasks"]) > 0:
-            # Sort tasks by priority and due date
-            tasks = sorted(
-                agenda["tasks"],
-                key=lambda t: (
-                    {"high": 0, "medium": 1, "low": 2}.get(t.get("priority", "medium"), 1),
-                    t.get("due_date", "9999-99-99")
-                )
-            )
+        if agenda.get("tasks") and isinstance(agenda["tasks"], list) and len(agenda["tasks"]) > 0:
+            valid_tasks = []
             
-            for task in tasks:
-                title = task.get("title", "Untitled Task")
-                priority = task.get("priority", "medium")
-                due_date = task.get("due_date", "")
+            # Filter out None tasks or tasks with missing required fields
+            for task in agenda["tasks"]:
+                if task is not None and isinstance(task, dict) and "title" in task:
+                    valid_tasks.append(task)
+                    
+            if valid_tasks:
+                # Sort tasks by priority and due date with safe default values
+                try:
+                    # Debug the task data
+                    logging.info(f"Task data before sorting: {json.dumps(valid_tasks)}")
+                    
+                    # Define a custom sorting function to handle None values
+                    def task_sort_key(task):
+                        # Handle priority
+                        priority_map = {"high": 0, "medium": 1, "low": 2}
+                        priority = task.get("priority", "medium")
+                        priority_val = priority_map.get(priority, 1) if priority else 1
+                        
+                        # Handle due date - convert None or empty string to far future date
+                        due_date = task.get("due_date", None)
+                        if not due_date:  # Handle None or empty string
+                            return (priority_val, "9999-99-99")
+                        return (priority_val, due_date)
+                    
+                    # Sort tasks using the custom key function
+                    tasks = sorted(valid_tasks, key=task_sort_key)
+                    logging.info(f"Sorted {len(tasks)} tasks successfully")
+                except Exception as e:
+                    logging.error(f"Error sorting tasks: {str(e)}")
+                    tasks = valid_tasks  # Use unsorted tasks if sorting fails
                 
-                priority_symbol = {
-                    "high": "🔴",
-                    "medium": "🟠",
-                    "low": "🟢"
-                }.get(priority, "🟠")
-                
-                due_str = f" (Due: {due_date})" if due_date else ""
-                formatted += f"  {priority_symbol} {title}{due_str}\n"
+                for task in tasks:
+                    title = task.get("title", "Untitled Task")
+                    priority = task.get("priority", "medium")
+                    due_date = task.get("due_date", "")
+                    
+                    # Set the emoji based on priority
+                    emoji = "🔴" if priority == "high" else "🟠" if priority == "medium" else "🟢"
+                    
+                    # Add the due date if available
+                    due_str = f" (Due: {due_date})" if due_date else ""
+                    formatted += f"  {emoji} {title}{due_str}\n"
+            else:
+                formatted += "  No valid tasks found.\n"
         else:
             formatted += "  No pending tasks for today.\n"
         
@@ -146,7 +189,7 @@ class AgendaClient:
         if priority:
             params["priority"] = priority
         
-        return self.client.invoke_method("todo", "add_task", params)
+        return self.client.invoke_method("todo", "add_task", params, client_id=self.client_id)
     
     def get_weather(self, location="Boston"):
         """Get weather for a location"""
@@ -158,7 +201,12 @@ class AgendaClient:
 
 def run_interactive_agenda_client():
     """Run an interactive agenda client"""
-    client = AgendaClient()
+    # Create agenda client with a consistent client ID
+    try:
+        client = AgendaClient(client_id="interactive_user")
+    except Exception as e:
+        print(f"Failed to initialize client: {str(e)}")
+        return
     
     print("\n" + "=" * 60)
     print("🤖 Welcome to the Distributed Agenda System")

@@ -1,17 +1,19 @@
 import grpc
 import time
 import logging
+import os
+import signal
 from concurrent import futures
 import protocol_pb2 as pb2
 import protocol_pb2_grpc as pb2_grpc
 from server.auth_provider import AuthProvider
-from server.todo_service import TodoService
+from server.sqlite_todo_service import SQLiteTodoService
 
 class TodoServer(pb2_grpc.DistributedServiceServicer):
     def __init__(self):
         self.methods = {}
         self.auth_provider = AuthProvider()
-        self.todo_service = TodoService()
+        self.todo_service = SQLiteTodoService()
         self.register_methods()
         
     def register_methods(self):
@@ -103,7 +105,7 @@ class TodoServer(pb2_grpc.DistributedServiceServicer):
                 capability = pb2.CapabilitiesResponse.Capability(
                     id=method_id,
                     name=method_id,
-                    description=f"Weather API: {method_id}",
+                    description=f"Todo API: {method_id}",
                     type=pb2.CapabilitiesResponse.Capability.METHOD,
                     required_permission=method_info["required_permission"]
                 )
@@ -119,18 +121,29 @@ def serve(port=50053, max_workers=10):
     # Register the service
     pb2_grpc.add_DistributedServiceServicer_to_server(service, server)
     
+    # Setup proper shutdown to close database connections
+    def graceful_shutdown(signum, frame):
+        print("Shutting down Todo Server gracefully...")
+        server.stop(3)  # 3 second grace period
+        service.todo_service.close_all()  # Close all database connections
+        print("Todo Server stopped")
+        exit(0)
+        
+    signal.signal(signal.SIGINT, graceful_shutdown)
+    signal.signal(signal.SIGTERM, graceful_shutdown)
+    
     # Start the server
     server.add_insecure_port(f'[::]:{port}')
     server.start()
     
-    print(f"Todo Server started on port {port}")
+    print(f"Todo Server started on port {port} with SQLite database storage")
+    print(f"Data will be stored persistently in the 'data' directory")
     
     try:
         while True:
             time.sleep(86400)  # Sleep for a day
     except KeyboardInterrupt:
-        server.stop(0)
-        print("Todo Server stopped")
+        graceful_shutdown(None, None)
 
 if __name__ == "__main__":
     logging.basicConfig(
