@@ -31,6 +31,9 @@ class AgendaClient:
             "todo": todo_server,
             "calendar": calendar_server
         }, default_client_id=client_id)
+        
+        # Display service information
+        self.show_service_info()
     
     def generate_daily_agenda(self):
         """Generate a comprehensive daily agenda"""
@@ -56,6 +59,42 @@ class AgendaClient:
             logging.error(f"Error generating agenda: {str(e)}")
             print(f"Error generating agenda: {str(e)}")
     
+    def show_service_info(self):
+        """Display information about the connected services"""
+        print("Connecting to services and checking implementations...")
+        
+        # Check each server for service info
+        service_info = {}
+        for server_type in ["weather", "todo", "calendar"]:
+            if server_type not in self.client.servers or not self.client.servers[server_type].connected:
+                print(f"❌ {server_type.capitalize()} Service: Not connected")
+                continue
+                
+            try:
+                # Try to get service info by calling the get_service_info method
+                result = self.client.invoke_method(server_type, "get_service_info", {})
+                if result and "error" not in result:
+                    service_info[server_type] = result
+                    
+                    implementation = result.get("implementation", "Unknown")
+                    status_icon = "✅" if "Mock" not in implementation else "ℹ️"
+                    
+                    if server_type == "calendar" and implementation == "Google Calendar":
+                        auth_status = result.get("authentication_status", "Unknown")
+                        if auth_status != "Authenticated":
+                            status_icon = "⚠️"
+                            implementation += f" ({auth_status})"
+                    
+                    print(f"{status_icon} {server_type.capitalize()} Service: {implementation}")
+                else:
+                    print(f"ℹ️ {server_type.capitalize()} Service: Connected but no implementation info")
+            except Exception as e:
+                logging.error(f"Error getting service info for {server_type}: {str(e)}")
+                print(f"ℹ️ {server_type.capitalize()} Service: Connected")
+        
+        print()
+        return service_info
+        
     def _format_agenda(self, agenda):
         """Format the agenda data into a readable format"""
         today = datetime.now()
@@ -349,16 +388,27 @@ def run_interactive_agenda_client():
             
             else:
                 print("Unknown command. Type 'agenda', 'add event', 'add task', 'weather [location]', or 'exit'.")
-        
         except Exception as e:
-            print(f"Error: {str(e)}")
-    
-    print("\nThank you for using the Distributed Agenda System. Goodbye!")
-    client.close()
+            print(f"Error processing command: {str(e)}")
 
-if __name__ == "__main__":
+
+def main():
+    """Main function to run the Agenda Client"""
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
-    run_interactive_agenda_client()
+    
+    print("🤖 Welcome to the Distributed Agenda System")
+    print("============================================================")
+    print()
+    try:
+        run_interactive_agenda_client()
+    except Exception as e:
+        print(f"Error: {str(e)}")
+    
+    print("\nThank you for using the Distributed Agenda System. Goodbye!")
+
+
+if __name__ == "__main__":
+    main()

@@ -33,6 +33,19 @@ class TodoServer(pb2_grpc.DistributedServiceServicer):
             "handler": self.todo_service.delete_task,
             "required_permission": "write"
         }
+        self.methods["get_service_info"] = {
+            "handler": self.get_service_info,
+            "required_permission": "read"
+        }
+        
+    def get_service_info(self, params, **kwargs):
+        """Get information about the service implementation"""
+        return {
+            "service_name": "Todo Service",
+            "implementation": "SQLite Database",
+            "db_path": self.todo_service.db_manager.db_path if hasattr(self.todo_service, 'db_manager') else "unknown",
+            "port": 50053
+        }
     
     # Include InvokeMethod, HealthCheck and DiscoverCapabilities methods same as in weather_server.py
     def InvokeMethod(self, request, context):

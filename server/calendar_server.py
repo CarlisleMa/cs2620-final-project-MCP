@@ -1,17 +1,43 @@
 import grpc
 import time
 import logging
+import os
 from concurrent import futures
 import protocol_pb2 as pb2
 import protocol_pb2_grpc as pb2_grpc
 from server.auth_provider import AuthProvider
+
+# Import both the original and Google Calendar Service
 from server.calendar_service import CalendarService
+from server.google_calendar_service import GoogleCalendarService
 
 class CalendarServer(pb2_grpc.DistributedServiceServicer):
     def __init__(self):
         self.methods = {}
         self.auth_provider = AuthProvider()
-        self.calendar_service = CalendarService()
+        
+        # Check if we should use Google Calendar or the mock service
+        # Look for credentials or an environment variable
+        use_google = os.environ.get('USE_GOOGLE_CALENDAR', 'false').lower() == 'true'
+        creds_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'credentials', 'credentials.json')
+        
+        if use_google and os.path.exists(creds_path):
+            try:
+                logging.info("Initializing Google Calendar integration...")
+                self.calendar_service = GoogleCalendarService()
+                logging.info("Google Calendar integration enabled!")
+            except Exception as e:
+                logging.error(f"Failed to initialize Google Calendar: {str(e)}")
+                logging.warning("Falling back to mock calendar service")
+                self.calendar_service = CalendarService()
+        else:
+            if use_google:
+                logging.warning("Google Calendar credentials not found at: " + creds_path)
+                logging.warning("Falling back to mock calendar service")
+            else:
+                logging.info("Using mock calendar service (set USE_GOOGLE_CALENDAR=true to use Google Calendar)")
+            self.calendar_service = CalendarService()
+            
         self.register_methods()
         
     def register_methods(self):
@@ -23,9 +49,37 @@ class CalendarServer(pb2_grpc.DistributedServiceServicer):
             "handler": self.calendar_service.get_events,
             "required_permission": "read"
         }
+        self.methods["get_today_events"] = {
+            "handler": self.calendar_service.get_today_events,
+            "required_permission": "read"
+        }
+        self.methods["get_service_info"] = {
+            "handler": self.get_service_info,
+            "required_permission": "read"
+        }
         self.methods["update_event"] = {
             "handler": self.calendar_service.update_event,
             "required_permission": "write"
+        }
+        
+    def get_service_info(self, params, **kwargs):
+        """Get information about the service implementation"""
+        # Determine if we're using Google Calendar or mock implementation
+        service_type = "Google Calendar" if isinstance(self.calendar_service, GoogleCalendarService) else "Mock Calendar"
+        
+        # Check if Google Calendar is properly authenticated
+        google_auth_status = "Not applicable"
+        if service_type == "Google Calendar":
+            if hasattr(self.calendar_service, 'service') and self.calendar_service.service:
+                google_auth_status = "Authenticated"
+            else:
+                google_auth_status = "Not authenticated"
+        
+        return {
+            "service_name": "Calendar Service",
+            "implementation": service_type,
+            "authentication_status": google_auth_status,
+            "port": 50054
         }
         self.methods["delete_event"] = {
             "handler": self.calendar_service.delete_event,

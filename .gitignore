@@ -9,6 +9,12 @@
 *.db-wal
 data/*.db
 
+# Google Calendar credentials
+credentials/
+*.json
+!.env.example.json
+token.json
+
 # Python
 __pycache__/
 *.py[cod]

@@ -58,21 +58,31 @@ class ServerConnection:
         """Discover server capabilities"""
         try:
             response = self.stub.DiscoverCapabilities(
-                pb2.DiscoveryRequest(
-                    client_id=self.client_id,
-                    api_key=self.api_key
-                )
+                pb2.DiscoverCapabilitiesRequest(client_id=self.client_id)
             )
             
-            # Process capabilities
+            # Parse capabilities from response
             self.capabilities = {}
             for capability in response.capabilities:
-                self.capabilities[capability.id] = {
-                    "name": capability.name,
+                self.capabilities[capability.name] = {
                     "description": capability.description,
-                    "type": capability.type,
-                    "required_permission": capability.required_permission
+                    "parameters": json.loads(capability.parameters)
                 }
+            
+            # Get service implementation info
+            try:
+                metadata_request = pb2.GenericRequest(
+                    client_id=self.client_id,
+                    params=json.dumps({"type": "service_info"})
+                )
+                metadata_response = self.stub.ExecuteServerMethod(
+                    metadata_request, metadata=(('method', 'get_service_info'),)
+                )
+                self.service_info = json.loads(metadata_response.response)
+                logging.info(f"{self.server_type} service info: {self.service_info}")
+            except Exception as e:
+                logging.warning(f"Could not get service info from {self.server_type} server: {str(e)}")
+                self.service_info = {"type": "unknown"}
             
             logging.info(f"Discovered {len(self.capabilities)} capabilities on {self.server_type} server")
             return self.capabilities
@@ -204,7 +214,7 @@ class MultiServerClient:
         
         Args:
             client_id: Optional client ID to use for all requests in this agenda generation
-                      If None, uses the default client ID
+                       If None, uses the default client ID
         """
         # If no client_id is provided, use the default
         if client_id is None:
@@ -223,8 +233,8 @@ class MultiServerClient:
         if "weather" in self.servers:
             try:
                 # Assuming the user is in Boston
-                weather_result = self.servers["weather"].invoke_method(
-                    "get_current_weather", {"location": "Boston"}
+                weather_result = self.invoke_method(
+                    "weather", "get_current_weather", {"location": "Boston"}, client_id=client_id
                 )
                 agenda["weather"] = weather_result
             except Exception as e:
@@ -233,18 +243,27 @@ class MultiServerClient:
         # Get calendar events for today
         if "calendar" in self.servers:
             try:
-                today = time.strftime("%Y-%m-%d")
-                tomorrow = time.strftime(
-                    "%Y-%m-%d", time.localtime(time.time() + 86400)
-                )
+                # Log what type of calendar we're using
+                if hasattr(self.servers["calendar"], 'service_info'):
+                    service_type = self.servers["calendar"].service_info.get("implementation", "Unknown")
+                    if "Google Calendar" in service_type:
+                        auth_status = self.servers["calendar"].service_info.get("authentication_status", "Unknown")
+                        logging.info(f"Using Google Calendar API ({auth_status}) to fetch events")
+                    else:
+                        logging.info(f"Using {service_type} to fetch events")
                 
-                events_result = self.servers["calendar"].invoke_method(
-                    "get_events",
-                    {"start_date": today, "end_date": tomorrow}
+                logging.info("Fetching today's calendar events using system time")
+                
+                # Use the new get_today_events method which gets today's date from the system
+                events_result = self.invoke_method(
+                    "calendar", "get_today_events", {}, client_id=client_id
                 )
                 
                 if "events" in events_result:
                     agenda["events"] = events_result["events"]
+                    logging.info(f"Retrieved {len(events_result['events'])} events from calendar")
+                else:
+                    logging.warning("No events returned from calendar service")
             except Exception as e:
                 logging.error(f"Error getting calendar events: {str(e)}")
         
@@ -253,17 +272,23 @@ class MultiServerClient:
             try:
                 logging.info(f"Retrieving tasks from todo server for client_id={client_id}")
                 tasks_result = self.invoke_method(
-                    "todo", "get_tasks", {"include_completed": False}, 
-                    client_id=client_id  # Use the consistent client_id
+                    "todo", "get_tasks", {}, client_id=client_id
                 )
                 
-                if "tasks" in tasks_result and tasks_result["tasks"] is not None:
-                    logging.info(f"Retrieved {len(tasks_result['tasks'])} tasks from todo server")
-                    # Make a copy of the tasks list to avoid reference issues
-                    agenda["tasks"] = list(tasks_result["tasks"])
-                else:
-                    logging.warning(f"No tasks returned or missing 'tasks' key. Full result: {tasks_result}")
-                    agenda["tasks"] = []
+                logging.info(f"Retrieved {len(tasks_result.get('tasks', []))} tasks from todo server")
+                
+                if "tasks" in tasks_result:
+                    # Sort tasks by priority
+                    tasks = tasks_result["tasks"]
+                    for task in tasks:
+                        task["priority"] = task.get("priority", "medium")
+                        
+                    # Sort tasks by priority (high, medium, low)
+                    priority_order = {"high": 0, "medium": 1, "low": 2}
+                    tasks.sort(key=lambda x: priority_order.get(x["priority"].lower(), 99))
+                    
+                    agenda["tasks"] = tasks
+                    logging.info(f"Sorted {len(tasks)} tasks successfully")
             except Exception as e:
                 logging.error(f"Error getting tasks: {str(e)}")
         

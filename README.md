@@ -16,12 +16,14 @@ A distributed system with multiple microservices including calendar, todo, and w
 
 This project implements a distributed system with multiple microservices communicating via gRPC. The system includes:
 
-- Calendar Service (appointment management)
-- Todo Service (task management)
-- Weather Service (weather data retrieval with Weather API integration)
+- Calendar Service (appointment management with Google Calendar integration)
 - Todo Service (task management with SQLite persistence)
+- Weather Service (weather data retrieval with WeatherAPI.com integration)
 
-The weather service integrates with the Weather API to provide real-time weather data.
+The system includes multiple API integrations:
+- The Weather Service integrates with WeatherAPI.com to provide real-time weather data.
+- The Calendar Service can integrate with Google Calendar for real appointment management.
+- The Todo Service uses SQLite for persistent storage of tasks.
 
 ## Project Structure
 
@@ -62,7 +64,13 @@ pip install grpcio grpcio-tools protobuf requests python-dotenv
 
 ## Environment Setup
 
-This project requires environment variables for the Weather API integration. Here's how to set them up:
+This project requires environment variables for the Weather API integration and Google Calendar integration. Here's how to set them up:
+
+### Environment Variables
+
+- `WEATHER_API_KEY`: Your API key for WeatherAPI.com (required for real weather data)
+- `USE_GOOGLE_CALENDAR`: Set to 'true' to enable Google Calendar integration (defaults to 'false')
+- `WEATHER_SERVER_PORT`: Port for the weather server (defaults to 50052)
 
 ### Using a .env File (Recommended)
 
@@ -198,6 +206,49 @@ client.add_task(
     "high"
 )
 ```
+
+## Google Calendar Integration
+
+This project supports integration with Google Calendar, allowing you to manage real calendar events instead of using the mock implementation. 
+
+### Setting Up Google Calendar Credentials
+
+1. **Create a Google Cloud Project:**
+   - Go to the [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project from the dropdown menu
+   - Name your project (e.g., "Distributed System Calendar")
+
+2. **Enable the Google Calendar API:**
+   - Navigate to "APIs & Services" > "Library"
+   - Search for "Google Calendar API" and click on it
+   - Click "Enable"
+
+3. **Set Up OAuth Consent Screen:**
+   - Go to "APIs & Services" > "OAuth consent screen"
+   - Select "External" as the user type
+   - Fill in required fields (app name, support email, developer contact)
+   - Add the scope: `https://www.googleapis.com/auth/calendar`
+   - Add your email as a test user
+
+4. **Create OAuth Credentials:**
+   - Go to "APIs & Services" > "Credentials"
+   - Click "Create Credentials" > "OAuth client ID"
+   - Choose "Desktop app" and give it a name
+   - Download the JSON file
+
+5. **Configure Your Application:**
+   - Create a `credentials` directory in your project root:
+     ```bash
+     mkdir -p credentials
+     ```
+   - Rename the downloaded file to `credentials.json` and move it to the `credentials/` directory
+   - Add `USE_GOOGLE_CALENDAR=true` to your `.env` file
+
+> **Important Security Note:** Never commit your credentials files to version control! The `credentials/` directory and JSON files are already in the `.gitignore` file to prevent accidental commits.
+
+For more detailed instructions, see the [Google Calendar Setup Guide](docs/google_calendar_setup.md).
+
+The system will automatically detect and use Google Calendar if properly configured, or fall back to the mock implementation if not.
 
 ## API Services
 

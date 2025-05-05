@@ -55,6 +55,22 @@ class CalendarService:
             "event_id": event_id
         }
     
+    def get_today_events(self, params, **kwargs):
+        """Get a user's calendar events for today using system time"""
+        # Get today's date from the system
+        today = datetime.now()
+        tomorrow = today + timedelta(days=1)
+        
+        # Format dates for the local method's params
+        today_start = today.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Use the existing get_events method with today's dates
+        return self.get_events({
+            "start_date": today_start.strftime("%Y-%m-%dT%H:%M:%S"),
+            "end_date": today_end.strftime("%Y-%m-%dT%H:%M:%S")
+        }, **kwargs)
+    
     def get_events(self, params, **kwargs):
         """Get a user's calendar events"""
         client_id = kwargs.get('client_id', 'anonymous')

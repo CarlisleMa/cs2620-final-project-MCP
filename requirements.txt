@@ -1,0 +1,17 @@
+# gRPC dependencies
+grpcio==1.44.0
+grpcio-tools==1.44.0
+protobuf==3.19.4
+
+# Weather API dependencies
+requests==2.27.1
+python-dotenv==0.20.0
+
+# Google Calendar API dependencies
+google-api-python-client==2.47.0
+google-auth-httplib2==0.1.0
+google-auth-oauthlib==0.5.1
+pytz==2023.3
+
+# SQLite threaded operations
+# No external dependencies needed - uses Python's built-in sqlite3

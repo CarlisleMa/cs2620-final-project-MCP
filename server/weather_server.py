@@ -23,6 +23,22 @@ class WeatherServer(pb2_grpc.DistributedServiceServicer):
             "handler": self.weather_service.get_forecast,
             "required_permission": "read"
         }
+        self.methods["get_service_info"] = {
+            "handler": self.get_service_info,
+            "required_permission": "read"
+        }
+        
+    def get_service_info(self, params, **kwargs):
+        """Get information about the service implementation"""
+        # Check if using real weather API or mock
+        service_type = "WeatherAPI.com" if self.weather_service.api_key else "Mock Weather"
+        
+        return {
+            "service_name": "Weather Service", 
+            "implementation": service_type,
+            "api_key_configured": bool(self.weather_service.api_key),
+            "port": 50052
+        }
     
     def InvokeMethod(self, request, context):
         # Implement just like in the original server.py, but with weather-specific methods
